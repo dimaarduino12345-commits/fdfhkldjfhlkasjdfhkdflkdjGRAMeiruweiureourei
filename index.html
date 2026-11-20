@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GRAM Wallet</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+    /* Стили оставляем без изменений, чтобы не раздувать код. Они точно такие же, как в прошлом ответе. */
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
+    body { background: #e8e8ea; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif; display: flex; justify-content: center; min-height: 100vh; overflow: hidden; }
+    .app { width: 100%; max-width: 390px; background: #fff; height: 100vh; display: flex; flex-direction: column; overflow-y: auto; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); position: relative; }
+    
+    .auth-screen { position: absolute; inset: 0; background: #fff; display: flex; flex-direction: column; padding: 24px 20px; z-index: 50; overflow-y: auto; }
+    .auth-screen.hidden { display: none; }
+    .auth-logo { width: 72px; height: 72px; margin: 40px auto 20px; border-radius: 18px; background: linear-gradient(135deg, #1e7cf6, #5cb8ff); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 30px rgba(30,124,246,0.35); }
+    .auth-logo img { width: 40px; height: 40px; object-fit: contain; filter: brightness(0) invert(1); }
+    .auth-title { font-size: 22px; font-weight: 700; text-align: center; color: #1a1a1a; margin-bottom: 8px; }
+    .auth-sub { font-size: 14px; color: #8e8e93; text-align: center; margin-bottom: 30px; line-height: 1.4; }
+    .auth-btn { width: 100%; height: 50px; border: none; border-radius: 25px; font-size: 16px; font-weight: 600; font-family: inherit; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; margin-bottom: 12px; }
+    .auth-btn.primary { background: #1f8bff; color: #fff; }
+    .auth-btn.primary:hover { background: #187ae6; }
+    .auth-btn.secondary { background: #f0f0f0; color: #1a1a1a; }
+    .auth-btn.secondary:hover { background: #e5e5e5; }
+    .auth-btn:active { transform: scale(0.98); }
+    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .step-screen { position: absolute; inset: 0; background: #fff; display: none; flex-direction: column; padding: 20px; z-index: 60; overflow-y: auto; }
+    .step-screen.active { display: flex; }
+    .step-header { display: flex; align-items: center; margin-bottom: 20px; padding-top: 10px; }
+    .back-btn { width: 40px; height: 40px; border-radius: 50%; border: none; background: #f0f0f0; cursor: pointer; display: flex; align-items: center; justify-content: center; margin-right: 12px; }
+    .back-btn svg { width: 18px; height: 18px; fill: #1a1a1a; }
+    .step-title { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+    .step-desc { font-size: 14px; color: #8e8e93; line-height: 1.5; margin-bottom: 20px; }
+
+    .seed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .seed-word { display: flex; align-items: center; background: #f5f5f7; border-radius: 10px; padding: 10px 12px; font-size: 14px; font-weight: 500; color: #1a1a1a; }
+    .seed-word .num { color: #8e8e93; font-size: 12px; width: 20px; flex-shrink: 0; }
+    .seed-warning { background: #fff4e5; border: 1px solid #ffd699; border-radius: 12px; padding: 14px; font-size: 13px; color: #8a6d00; line-height: 1.5; margin-bottom: 20px; }
+    .seed-warning strong { display: block; margin-bottom: 4px; color: #6b5300; }
+
+    .seed-input-grid { display: grid; grid-template-columns: 1fr; gap: 8px; margin-bottom: 16px; }
+    .seed-input-item { display: flex; align-items: center; background: #f5f5f7; border: 1.5px solid transparent; border-radius: 10px; padding: 0 12px; transition: border-color 0.15s, background 0.15s; }
+    .seed-input-item:focus-within { border-color: #1f8bff; background: #fff; }
+    .seed-input-item .num { color: #8e8e93; font-size: 12px; width: 22px; flex-shrink: 0; font-weight: 500; }
+    .seed-input-item input { flex: 1; min-width: 0; background: transparent; border: none; padding: 14px 4px; font-size: 15px; font-family: inherit; outline: none; color: #1a1a1a; }
+    .seed-input-item input::placeholder { color: #c7c7cc; }
+
+    .error-text { color: #ff3b30; font-size: 13px; margin-bottom: 12px; display: none; line-height: 1.4; }
+    .error-text.show { display: block; }
+    .checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; font-size: 13px; color: #555; line-height: 1.4; }
+    .checkbox-row input { margin-top: 2px; width: 18px; height: 18px; accent-color: #1f8bff; flex-shrink: 0; }
+
+    .main-screen { display: none; flex-direction: column; flex: 1; }
+    .main-screen.active { display: flex; }
+    .top { background: #f0f0f0; padding: 16px 14px 0; flex-shrink: 0; }
+    .card { position: relative; background: linear-gradient(110deg, #0a5fe0 0%, #1e7cf6 30%, #3d9bff 65%, #5cb8ff 100%); border-radius: 16px; padding: 18px 18px 14px; height: 178px; display: flex; flex-direction: column; justify-content: space-between; overflow: hidden; box-shadow: 0 8px 22px rgba(10, 95, 224, 0.25); }
+    .card::before { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 78% 30%, rgba(255,255,255,0.4), transparent 50%); pointer-events: none; }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; position: relative; z-index: 2; height: 100%; }
+    .balance { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; }
+    .gram { display: flex; align-items: center; gap: 10px; color: #fff; font-size: 24px; font-weight: 700; letter-spacing: -0.3px; transition: transform 0.2s ease; }
+    .gram.bump { transform: scale(1.05); }
+    .gram img { width: 30px; height: 30px; object-fit: contain; filter: brightness(0) invert(1); }
+    .usd { color: rgba(255,255,255,0.85); font-size: 12px; font-weight: 500; margin-left: 40px; }
+    .qr { width: 38px; height: 38px; border-radius: 8px; background: rgba(210, 215, 220, 0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.6); display: flex; align-items: center; justify-content: center; box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); margin-top: 18px; margin-right: 4px; cursor: pointer; }
+    .qr svg { width: 22px; height: 22px; fill: rgba(255,255,255,0.95); }
+    .card-holder { color: rgba(255,255,255,0.95); font-size: 10px; letter-spacing: 0.8px; font-weight: 600; position: relative; z-index: 2; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .buttons { display: flex; gap: 12px; padding: 14px 0 18px; }
+    .btn { flex: 1; height: 44px; border: none; border-radius: 22px; background: #1f8bff; color: #fff; font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 0.15s ease, transform 0.1s ease; }
+    .btn:hover { background: #187ae6; }
+    .btn:active { transform: scale(0.97); }
+    .bottom { background: #fff; padding: 18px 20px 26px; text-align: center; flex-grow: 0; position: relative; }
+    .note { color: #8e8e93; font-size: 13px; line-height: 1.4; }
+
+    .history { background: #fff; padding: 4px 16px 8px; flex: 1 0 auto; }
+    .history-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 4px 8px; }
+    .history-title { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+    .history-count { font-size: 12px; font-weight: 600; color: #8e8e93; background: #f2f2f4; border-radius: 10px; padding: 2px 8px; }
+    .history-count:empty { display: none; }
+    .history-empty { font-size: 13px; color: #8e8e93; text-align: center; padding: 26px 10px; line-height: 1.5; }
+    .tx { display: flex; align-items: center; gap: 12px; padding: 11px 4px; border-bottom: 1px solid #f2f2f4; }
+    .tx:last-child { border-bottom: none; }
+    .tx-icon { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .tx-icon.in { background: #e6f7ec; color: #1aa053; }
+    .tx-icon.out { background: #ffeceb; color: #ff3b30; }
+    .tx-body { flex: 1; min-width: 0; }
+    .tx-title { font-size: 14px; font-weight: 600; color: #1a1a1a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tx-meta { font-size: 11px; color: #8e8e93; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tx-id { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 10px; color: #b0b0b6; cursor: pointer; border-bottom: 1px dashed #d8d8dd; }
+    .tx-amt { font-size: 14px; font-weight: 700; white-space: nowrap; flex-shrink: 0; }
+    .tx-amt.in { color: #1aa053; }
+    .tx-amt.out { color: #1a1a1a; }
+    .logout-link { margin-top: 24px; font-size: 13px; color: #1f8bff; background: none; border: none; cursor: pointer; font-family: inherit; text-decoration: underline; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 100; backdrop-filter: blur(2px); }
+    .overlay.active { display: flex; }
+    .modal { background: #fff; border-radius: 18px; padding: 22px 20px; width: 100%; max-width: 320px; box-shadow: 0 20px 50px rgba(0,0,0,0.3); animation: pop 0.2s ease; }
+    @keyframes pop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: #1a1a1a; }
+    .modal p.sub { font-size: 13px; color: #8e8e93; margin-bottom: 16px; }
+    .modal input { width: 100%; height: 48px; border: 1.5px solid #d1d1d6; border-radius: 12px; padding: 0 14px; font-size: 16px; font-family: inherit; outline: none; margin-bottom: 12px; transition: border-color 0.15s; }
+    .modal input:focus { border-color: #1f8bff; }
+    .modal .hint { font-size: 12px; color: #8e8e93; margin-bottom: 16px; margin-top: -6px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 8px; }
+    .modal-actions button { flex: 1; height: 44px; border: none; border-radius: 22px; font-size: 15px; font-weight: 500; font-family: inherit; cursor: pointer; transition: background 0.15s ease; }
+    .modal-actions .cancel { background: #f0f0f0; color: #1a1a1a; }
+    .modal-actions .cancel:hover { background: #e5e5e5; }
+    .modal-actions .confirm { background: #1f8bff; color: #fff; }
+    .modal-actions .confirm:hover { background: #187ae6; }
+    .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(30,30,30,0.92); color: #fff; font-size: 14px; padding: 12px 20px; border-radius: 24px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 200; max-width: 85%; text-align: center; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+    <div class="app">
+        <div class="auth-screen" id="authScreen">
+            <div class="auth-logo"><img src="https://i.ibb.co/7NTpKv1F/gram.png" alt="GRAM"></div>
+            <div class="auth-title">GRAM Wallet</div>
+            <div class="auth-sub">Войдите или создайте кошелёк, чтобы продолжить</div>
+            <button class="auth-btn primary" id="goCreate">Создать кошелёк</button>
+            <button class="auth-btn secondary" id="goImport">Войти с сид-фразой</button>
+        </div>
+
+        <div class="step-screen" id="createScreen">
+            <div class="step-header">
+                <button class="back-btn" data-back><svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+                <div class="step-title">Ваша сид-фраза</div>
+            </div>
+            <p class="step-desc">Запишите эти 12 слов на бумаге и храните в надёжном месте. Это единственный способ восстановить доступ к кошельку.</p>
+            <div class="seed-grid" id="seedGrid"></div>
+            <div class="seed-warning"><strong>Никому не показывайте!</strong> Любой, кто узнает эту фразу, получит полный доступ к вашим средствам.</div>
+            <label class="checkbox-row"><input type="checkbox" id="confirmSaved"><span>Я записал(а) сид-фразу и понимаю, что без неё доступ восстановить невозможно.</span></label>
+            <button class="auth-btn primary" id="finishCreate" disabled>Создать кошелёк</button>
+        </div>
+
+        <div class="step-screen" id="importScreen">
+            <div class="step-header">
+                <button class="back-btn" data-back><svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg></button>
+                <div class="step-title">Вход по фразе</div>
+            </div>
+            <p class="step-desc">Введите 12 слов по порядку.</p>
+            <div class="seed-input-grid" id="seedInputGrid"></div>
+            <div class="error-text" id="importError"></div>
+            <button class="auth-btn primary" id="doImport">Войти</button>
+        </div>
+
+        <div class="main-screen" id="mainScreen">
+            <div class="top">
+                <div class="card">
+                    <div class="card-top">
+                        <div class="balance">
+                            <div class="gram" id="gramBalance"><img src="https://i.ibb.co/7NTpKv1F/gram.png" alt="GRAM"><span id="gramValue">0</span> GRAM</div>
+                            <div class="usd" id="usdValue">$0.00</div>
+                        </div>
+                        <div class="qr" id="qrBtn">
+                            <svg viewBox="0 0 24 24">
+                                <path d="M3 3h6v6H3V3zm2 2v2h2V5H5z" fill="rgba(255,255,255,0.95)"/>
+                                <path d="M15 3h6v6h-6V3zm2 2v2h2V5h-2z" fill="rgba(255,255,255,0.95)"/>
+                                <path d="M3 15h6v6H3v-6zm2 2v2h2v-2H5z" fill="rgba(255,255,255,0.95)"/>
+                                <rect x="15" y="15" width="2" height="2" fill="rgba(255,255,255,0.95)"/>
+                                <rect x="19" y="15" width="2" height="2" fill="rgba(255,255,255,0.95)"/>
+                                <rect x="15" y="19" width="2" height="2" fill="rgba(255,255,255,0.95)"/>
+                                <rect x="19" y="19" width="2" height="2" fill="rgba(255,255,255,0.95)"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="card-holder" id="cardHolder">ГОСТЬ</div>
+                </div>
+                <div class="buttons">
+                    <button class="btn" id="depositBtn">Пополнить</button>
+                    <button class="btn" id="sendBtn">Отправить</button>
+                </div>
+            </div>
+            <div class="history">
+                <div class="history-head">
+                    <div class="history-title">История операций</div>
+                    <div class="history-count" id="historyCount"></div>
+                </div>
+                <div id="historyList"></div>
+            </div>
+            <div class="bottom">
+                <p class="note" id="noteText">Деньги недоступны для этой учётной записи.</p>
+                <button class="logout-link" id="logoutBtn">Выйти из кошелька</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="depositOverlay">
+        <div class="modal">
+            <h3>Пополнить</h3>
+            <p class="sub">Введите количество GRAM</p>
+            <input type="number" id="depositInput" placeholder="0" min="1" step="1" inputmode="numeric">
+            <div class="hint">Курс: 1 GRAM = $1.00</div>
+            <div class="modal-actions">
+                <button class="cancel" data-close>Отмена</button>
+                <button class="confirm" id="depositConfirm">Пополнить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="overlay" id="sendOverlay">
+        <div class="modal">
+            <h3>Отправить</h3>
+            <p class="sub">Укажите получателя и сумму</p>
+            <input type="text" id="recipientInput" placeholder="Получатель (ID или @username)">
+            <input type="number" id="sendInput" placeholder="Сумма в GRAM" min="1" step="1" inputmode="numeric">
+            <div class="hint" id="sendHint">Доступно: 0 GRAM</div>
+            <div class="modal-actions">
+                <button class="cancel" data-close>Отмена</button>
+                <button class="confirm" id="sendConfirm">Отправить</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <!-- Подключаем Firebase SDK через CDN -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getDatabase, ref, get, set, update, child, onValue, off } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+        // Твоя конфигурация Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyANg3smVCX8JV_rqYaz2i8H9rbzwZZuZSk",
+            authDomain: "gramwallet.firebaseapp.com",
+            databaseURL: "https://gramwallet-default-rtdb.firebaseio.com",
+            projectId: "gramwallet",
+            storageBucket: "gramwallet.firebasestorage.app",
+            messagingSenderId: "85257650788",
+            appId: "1:85257650788:web:ca49cd67b6519abc705571",
+            measurementId: "G-C73TEWP87D"
+        };
+
+        // Инициализация Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // Переменные
+        const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+        let tgUserId = null;
+        let tgUser = null;
+        let currentUserData = null;
+        let unsubUser = null;
+
+        if (tg) {
+            tg.ready();
+            tg.expand();
+            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                tgUser = tg.initDataUnsafe.user;
+                tgUserId = String(tgUser.id);
+                const name = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || tgUser.username || 'Гость';
+                document.getElementById('cardHolder').textContent = name.toUpperCase();
+            }
+        }
+
+        // Если запущено не в телеге, используем тестовый ID (чтобы можно было тестировать в браузере)
+        if (!tgUserId) {
+            tgUserId = "test_user_123"; 
+            document.getElementById('cardHolder').textContent = "ТЕСТОВЫЙ ПОЛЬЗОВАТЕЛЬ";
+        }
+
+        // ================= BIP39 =================
+        const BIP39_WORDS = "abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action actor actress actual adapt add addict address adjust admit adult advance advice aerobic affair afford afraid again age agent agree ahead aim air airport aisle alarm album alcohol alert alien all alley allow almost alone alpha already also alter always amateur amazing among amount amused analyst anchor ancient anger angle angry animal ankle announce annual another answer antenna antique anxiety any apart apology appear apple approve april arch arctic area arena argue arm armed armor army around arrange arrest arrive arrow art artefact artist artwork ask aspect assault asset assist assume asthma athlete atom attack attend attitude attract auction audit august aunt author auto autumn average avocado avoid awake aware away awesome awful awkward axis baby bachelor bacon badge bag balance balcony ball bamboo banana banner bar barely bargain barrel base basic basket battle beach bean beauty because become beef before begin behave behind believe below belt bench benefit best betray better between beyond bicycle bid bike bind biology bird birth bitter black blade blame blanket blast bleak bless blind blood blossom blouse blue blur blush board boat body boil bomb bone bonus book boost border boring borrow boss bottom bounce box boy bracket brain brand brass brave bread breeze brick bridge brief bright bring brisk broccoli broken bronze broom brother brown brush bubble buddy budget buffalo build bulb bulk bullet bundle bunker burden burger burst bus business busy butter buyer buzz cabbage cabin cable cactus cage cake call calm camera camp can canal cancel candy cannon canoe canvas canyon capable capital captain car carbon card cargo carpet carry cart case cash casino castle casual cat catalog catch category cattle caught cause caution cave ceiling celery cement census century cereal certain chair chalk champion change chaos chapter charge chase chat cheap check cheese chef cherry chest chicken chief child chimney choice choose chronic chuckle chunk churn cigar cinnamon circle citizen city civil claim clap clarify claw clay clean clerk clever click client cliff climb clinic clip clock clog close cloth cloud clown club clump cluster clutch coach coast coconut code coffee coil coin collect color column combine come comfort comic common company concert conduct confirm congress connect consider control convince cook cool copper copy coral core corn correct cost cotton couch country couple course cousin cover coyote crack cradle craft cram crane crash crater crawl crazy cream credit creek crew cricket crime crisp critic crop cross crouch crowd crucial cruel cruise crumble crunch crush cry crystal cube culture cup cupboard curious current curtain curve cushion custom cute cycle".split(" ");
+
+        function randomWords(n) {
+            const arr = []; const used = new Set();
+            while (arr.length < n) {
+                const idx = Math.floor(Math.random() * BIP39_WORDS.length);
+                if (!used.has(idx)) { used.add(idx); arr.push(BIP39_WORDS[idx]); }
+            }
+            return arr;
+        }
+
+        // ================= UI Elements =================
+        const authScreen = document.getElementById('authScreen');
+        const createScreen = document.getElementById('createScreen');
+        const importScreen = document.getElementById('importScreen');
+        const mainScreen = document.getElementById('mainScreen');
+        const gramValueEl = document.getElementById('gramValue');
+        const usdValueEl = document.getElementById('usdValue');
+        const gramBalanceEl = document.getElementById('gramBalance');
+        const toastEl = document.getElementById('toast');
+        const RATE = 1.00;
+
+        function showScreen(screen) {
+            [authScreen, createScreen, importScreen, mainScreen].forEach(s => s.classList.remove('active', 'hidden'));
+            if (screen === 'auth') authScreen.classList.remove('hidden');
+            else if (screen === 'create') createScreen.classList.add('active');
+            else if (screen === 'import') importScreen.classList.add('active');
+            else if (screen === 'main') mainScreen.classList.add('active');
+            if (screen !== 'auth') authScreen.classList.add('hidden');
+        }
+
+        function showToast(text) {
+            toastEl.textContent = text;
+            toastEl.classList.add('show');
+            clearTimeout(window.toastTimer);
+            window.toastTimer = setTimeout(() => toastEl.classList.remove('show'), 2200);
+        }
+
+        function render() {
+            if (!currentUserData) return;
+            const bal = currentUserData.balance || 0;
+            gramValueEl.textContent = bal;
+            usdValueEl.textContent = '$' + (bal * RATE).toFixed(2);
+            document.getElementById('sendHint').textContent = 'Доступно: ' + bal + ' GRAM';
+            document.getElementById('cardHolder').textContent = displayName(currentUserData).toUpperCase();
+            renderHistory();
+        }
+
+        // ================= Утилиты =================
+        function esc(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function formatDate(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            const p = n => String(n).padStart(2, '0');
+            return p(d.getDate()) + '.' + p(d.getMonth() + 1) + '.' + d.getFullYear() + ', ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        }
+
+        function makeTxId() {
+            const t = Date.now().toString(36).toUpperCase();
+            const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+            return 'TX' + t + r;
+        }
+
+        function displayName(data) {
+            if (data && data.name) return data.name;
+            if (tgUser) return [tgUser.first_name, tgUser.last_name].filter(Boolean).join(' ') || tgUser.username || 'Пользователь';
+            return 'Пользователь';
+        }
+
+        function txIconArrow(isIn) {
+            return isIn
+                ? '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M6 13l6 6 6-6"/></svg>'
+                : '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="M6 11l6-6 6 6"/></svg>';
+        }
+
+        // ================= История операций =================
+        function renderHistory() {
+            const listEl = document.getElementById('historyList');
+            const countEl = document.getElementById('historyCount');
+            const hist = currentUserData && currentUserData.history ? Object.values(currentUserData.history) : [];
+            hist.sort((a, b) => (b.ts || 0) - (a.ts || 0));
+
+            countEl.textContent = hist.length ? hist.length : '';
+
+            if (!hist.length) {
+                listEl.innerHTML = '<div class="history-empty">Операций пока нет.<br>Пополните кошелёк или сделайте перевод.</div>';
+                return;
+            }
+
+            listEl.innerHTML = hist.map(tx => {
+                const isIn = tx.direction === 'in';
+                let title;
+                if (tx.type === 'deposit') title = 'Пополнение';
+                else title = isIn ? 'Перевод от ' + (tx.counterparty || 'пользователя') : 'Перевод для ' + (tx.counterparty || 'пользователя');
+                const sign = isIn ? '+' : '−';
+                return '<div class="tx">' +
+                    '<div class="tx-icon ' + (isIn ? 'in' : 'out') + '">' + txIconArrow(isIn) + '</div>' +
+                    '<div class="tx-body">' +
+                        '<div class="tx-title">' + esc(title) + '</div>' +
+                        '<div class="tx-meta">' + esc(formatDate(tx.ts)) + ' · <span class="tx-id" data-txid="' + esc(tx.id) + '">' + esc(tx.id) + '</span></div>' +
+                    '</div>' +
+                    '<div class="tx-amt ' + (isIn ? 'in' : 'out') + '">' + sign + esc(tx.amount) + ' GRAM</div>' +
+                '</div>';
+            }).join('');
+        }
+
+        document.getElementById('historyList').addEventListener('click', (e) => {
+            const idEl = e.target.closest('.tx-id');
+            if (!idEl) return;
+            const id = idEl.dataset.txid;
+            const done = () => showToast('ID скопирован: ' + id);
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = id;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); done(); } catch (_) { showToast('ID: ' + id); }
+                document.body.removeChild(ta);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(id).then(done).catch(fallback);
+            } else fallback();
+        });
+
+        // ================= Сессия =================
+        function subscribeUser() {
+            if (unsubUser) return;
+            unsubUser = onValue(child(ref(db), `users/${tgUserId}`), (snap) => {
+                if (snap.exists()) {
+                    currentUserData = snap.val();
+                    render();
+                }
+            });
+        }
+
+        function enterWallet() {
+            showScreen('main');
+            render();
+            subscribeUser();
+            syncUsername();
+        }
+
+        async function syncUsername() {
+            if (!tgUser || !tgUser.username) return;
+            try {
+                await set(ref(db, `usernames/${tgUser.username.toLowerCase()}`), tgUserId);
+            } catch (e) {
+                console.warn('Не удалось обновить username', e);
+            }
+        }
+
+        // ================= Загрузка данных из Firebase =================
+        async function loadUserData() {
+            try {
+                const snapshot = await get(child(ref(db), `users/${tgUserId}`));
+                if (snapshot.exists()) {
+                    currentUserData = snapshot.val();
+                    if (currentUserData.phrase && currentUserData.session && currentUserData.session.active) {
+                        enterWallet();
+                        return;
+                    }
+                }
+                showScreen('auth');
+            } catch (error) {
+                console.error("Ошибка Firebase:", error);
+                showToast("Ошибка подключения к базе данных");
+                showScreen('auth');
+            }
+        }
+
+        // ================= Создание кошелька =================
+        const seedInputGrid = document.getElementById('seedInputGrid');
+        const importInputs = [];
+        for (let i = 0; i < 12; i++) {
+            const wrap = document.createElement('div');
+            wrap.className = 'seed-input-item';
+            wrap.innerHTML = `<span class="num">${i + 1}.</span><input type="text" autocomplete="off" spellcheck="false" placeholder="слово ${i + 1}">`;
+            seedInputGrid.appendChild(wrap);
+            const inp = wrap.querySelector('input');
+            importInputs.push(inp);
+
+            inp.addEventListener('keydown', (e) => {
+                if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    if (i < 11) importInputs[i + 1].focus();
+                    else document.getElementById('doImport').click();
+                } else if (e.key === 'Backspace' && !inp.value && i > 0) {
+                    e.preventDefault();
+                    importInputs[i - 1].focus();
+                }
+            });
+
+            inp.addEventListener('paste', (e) => {
+                const text = (e.clipboardData || window.clipboardData).getData('text');
+                if (!text) return;
+                const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                if (words.length <= 1) return;
+                e.preventDefault();
+                let idx = i;
+                for (const w of words) {
+                    if (idx >= 12) break;
+                    importInputs[idx].value = w;
+                    idx++;
+                }
+                const nextEmpty = importInputs.findIndex((el, k) => k >= idx && !el.value);
+                if (nextEmpty !== -1) importInputs[nextEmpty].focus();
+                else importInputs[11].focus();
+            });
+        }
+
+        let pendingPhrase = [];
+
+        document.getElementById('goCreate').addEventListener('click', () => {
+            pendingPhrase = randomWords(12);
+            const grid = document.getElementById('seedGrid');
+            grid.innerHTML = '';
+            pendingPhrase.forEach((w, i) => {
+                grid.innerHTML += `<div class="seed-word"><span class="num">${i + 1}.</span><span>${w}</span></div>`;
+            });
+            document.getElementById('confirmSaved').checked = false;
+            document.getElementById('finishCreate').disabled = true;
+            showScreen('create');
+        });
+
+        document.getElementById('confirmSaved').addEventListener('change', (e) => {
+            document.getElementById('finishCreate').disabled = !e.target.checked;
+        });
+
+        document.getElementById('finishCreate').addEventListener('click', async () => {
+            if (!document.getElementById('confirmSaved').checked) return;
+            const btn = document.getElementById('finishCreate');
+            btn.disabled = true;
+
+            try {
+                const ts = Date.now();
+                const data = {
+                    phrase: pendingPhrase,
+                    balance: 0,
+                    createdAt: ts,
+                    name: displayName(),
+                    session: { active: true, at: ts }
+                };
+                if (tgUser && tgUser.username) data.username = tgUser.username.toLowerCase();
+
+                await set(ref(db, `users/${tgUserId}`), data);
+                if (data.username) {
+                    await update(ref(db), { [`usernames/${data.username}`]: tgUserId });
+                }
+
+                currentUserData = data;
+                showToast('Кошелёк создан');
+                enterWallet();
+            } catch (e) {
+                console.error(e);
+                showToast('Ошибка сохранения');
+                btn.disabled = false;
+            }
+        });
+
+        // ================= Вход по фразе =================
+        document.getElementById('goImport').addEventListener('click', () => {
+            importInputs.forEach(i => i.value = '');
+            document.getElementById('importError').classList.remove('show');
+            showScreen('import');
+            setTimeout(() => importInputs[0].focus(), 200);
+        });
+
+        document.getElementById('doImport').addEventListener('click', async () => {
+            const errEl = document.getElementById('importError');
+            errEl.classList.remove('show');
+            const words = importInputs.map(i => i.value.trim().toLowerCase());
+
+            const emptyIdx = words.findIndex(w => !w);
+            if (emptyIdx !== -1) {
+                errEl.textContent = 'Заполните все 12 полей. Пустое поле №' + (emptyIdx + 1);
+                errEl.classList.add('show');
+                importInputs[emptyIdx].focus();
+                return;
+            }
+
+            if (!currentUserData || !currentUserData.phrase) {
+                errEl.textContent = 'Кошелёк не найден в базе данных.';
+                errEl.classList.add('show');
+                return;
+            }
+
+            const saved = currentUserData.phrase.join(' ');
+            if (saved !== words.join(' ')) {
+                errEl.textContent = 'Неверная сид-фраза.';
+                errEl.classList.add('show');
+                return;
+            }
+
+            try {
+                await update(ref(db, `users/${tgUserId}/session`), { active: true, at: Date.now() });
+                currentUserData.session = { active: true, at: Date.now() };
+            } catch (e) {
+                console.error('Не удалось сохранить сессию', e);
+            }
+
+            showToast('Вход выполнен');
+            enterWallet();
+        });
+
+        // ================= Кнопки Назад =================
+        document.querySelectorAll('[data-back]').forEach(btn => btn.addEventListener('click', () => showScreen('auth')));
+
+        // ================= Пополнение и Отправка =================
+        const depositOverlay = document.getElementById('depositOverlay');
+        const sendOverlay = document.getElementById('sendOverlay');
+        const depositInput = document.getElementById('depositInput');
+        const sendInput = document.getElementById('sendInput');
+        const recipientInput = document.getElementById('recipientInput');
+
+        document.getElementById('depositBtn').addEventListener('click', () => {
+            depositInput.value = '';
+            depositOverlay.classList.add('active');
+        });
+
+        document.getElementById('sendBtn').addEventListener('click', () => {
+            sendInput.value = '';
+            recipientInput.value = '';
+            render();
+            sendOverlay.classList.add('active');
+        });
+
+        document.querySelectorAll('[data-close]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                depositOverlay.classList.remove('active');
+                sendOverlay.classList.remove('active');
+            });
+        });
+
+        document.getElementById('depositConfirm').addEventListener('click', async () => {
+            const val = parseFloat(depositInput.value);
+            if (!val || val <= 0) { showToast('Введите сумму'); return; }
+
+            const amount = Math.floor(val);
+            const btn = document.getElementById('depositConfirm');
+            btn.disabled = true;
+
+            try {
+                const snap = await get(child(ref(db), `users/${tgUserId}/balance`));
+                const cur = snap.exists() ? (snap.val() || 0) : 0;
+
+                const txId = makeTxId();
+                const ts = Date.now();
+
+                const updates = {};
+                updates[`users/${tgUserId}/balance`] = cur + amount;
+                updates[`transactions/${txId}`] = {
+                    id: txId,
+                    type: 'deposit',
+                    amount: amount,
+                    ts: ts,
+                    fromId: null,
+                    fromName: 'Система',
+                    toId: tgUserId,
+                    toName: displayName(currentUserData),
+                    status: 'completed'
+                };
+                updates[`users/${tgUserId}/history/${txId}`] = {
+                    id: txId,
+                    type: 'deposit',
+                    direction: 'in',
+                    amount: amount,
+                    ts: ts,
+                    counterparty: 'Пополнение',
+                    status: 'completed'
+                };
+
+                await update(ref(db), updates);
+
+                if (currentUserData) currentUserData.balance = cur + amount;
+                render();
+                depositOverlay.classList.remove('active');
+                showToast('Пополнено на ' + amount + ' GRAM · ' + txId);
+            } catch (e) {
+                console.error(e);
+                showToast('Ошибка обновления баланса');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        async function resolveRecipient(input) {
+            const raw = input.trim();
+            if (!raw) return null;
+            if (raw.startsWith('@')) {
+                const key = raw.slice(1).toLowerCase();
+                const snap = await get(child(ref(db), `usernames/${key}`));
+                return snap.exists() ? String(snap.val()) : null;
+            }
+            if (/^\d+$/.test(raw)) return raw;
+            const snap = await get(child(ref(db), `usernames/${raw.toLowerCase()}`));
+            return snap.exists() ? String(snap.val()) : null;
+        }
+
+        document.getElementById('sendConfirm').addEventListener('click', async () => {
+            const recipient = recipientInput.value.trim();
+            const val = parseFloat(sendInput.value);
+            if (!recipient) { showToast('Укажите получателя'); return; }
+            if (!val || val <= 0) { showToast('Введите сумму'); return; }
+
+            const amount = Math.floor(val);
+            const btn = document.getElementById('sendConfirm');
+            btn.disabled = true;
+
+            try {
+                const targetUid = await resolveRecipient(recipient);
+                if (!targetUid) { showToast('Получатель не найден по ID или @username'); return; }
+                if (targetUid === tgUserId) { showToast('Нельзя отправить самому себе'); return; }
+
+                const fromSnap = await get(child(ref(db), `users/${tgUserId}`));
+                const toSnap = await get(child(ref(db), `users/${targetUid}`));
+                if (!fromSnap.exists()) { showToast('Ваш кошелёк не найден'); return; }
+                if (!toSnap.exists()) { showToast('У получателя нет кошелька'); return; }
+
+                const fromData = fromSnap.val();
+                const toData = toSnap.val();
+                const fromBal = fromData.balance || 0;
+                const toBal = toData.balance || 0;
+
+                if (amount > fromBal) {
+                    showToast('Недостаточно средств. Доступно: ' + fromBal + ' GRAM');
+                    return;
+                }
+
+                const txId = makeTxId();
+                const ts = Date.now();
+                const fromName = displayName(fromData);
+                const toName = displayName(toData);
+
+                const updates = {};
+                updates[`users/${tgUserId}/balance`] = fromBal - amount;
+                updates[`users/${targetUid}/balance`] = toBal + amount;
+                updates[`transactions/${txId}`] = {
+                    id: txId,
+                    type: 'transfer',
+                    amount: amount,
+                    ts: ts,
+                    fromId: tgUserId,
+                    fromName: fromName,
+                    toId: targetUid,
+                    toName: toName,
+                    status: 'completed'
+                };
+                updates[`users/${tgUserId}/history/${txId}`] = {
+                    id: txId,
+                    type: 'send',
+                    direction: 'out',
+                    amount: amount,
+                    ts: ts,
+                    counterparty: toName,
+                    counterpartyId: targetUid,
+                    status: 'completed'
+                };
+                updates[`users/${targetUid}/history/${txId}`] = {
+                    id: txId,
+                    type: 'receive',
+                    direction: 'in',
+                    amount: amount,
+                    ts: ts,
+                    counterparty: fromName,
+                    counterpartyId: tgUserId,
+                    status: 'completed'
+                };
+
+                await update(ref(db), updates);
+
+                if (currentUserData) currentUserData.balance = fromBal - amount;
+                render();
+                sendOverlay.classList.remove('active');
+                showToast('Отправлено ' + amount + ' GRAM → ' + recipient + ' · ' + txId);
+            } catch (e) {
+                console.error(e);
+                showToast('Ошибка перевода');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('logoutBtn').addEventListener('click', async () => {
+            try {
+                if (unsubUser) { off(child(ref(db), `users/${tgUserId}`)); unsubUser = null; }
+                if (currentUserData) {
+                    await update(ref(db, `users/${tgUserId}/session`), { active: false, at: Date.now() });
+                    currentUserData.session = { active: false, at: Date.now() };
+                }
+            } catch (e) {
+                console.error('Не удалось закрыть сессию', e);
+            }
+            showScreen('auth');
+        });
+
+        // ================= Старт =================
+        loadUserData();
+
+    </script>
+</body>
+</html>
